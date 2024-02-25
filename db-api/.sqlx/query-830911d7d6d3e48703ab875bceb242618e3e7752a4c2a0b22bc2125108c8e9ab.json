@@ -1,0 +1,28 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "INSERT INTO orders (\n            work_piece,\n            client_id,\n            order_number,\n            quantity,\n            due_date,\n            late_penalty,\n            early_penalty\n        )\n        VALUES\n            ($1, $2, $3, $4, $5, $6, $7)\n        RETURNING id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8",
+        "Int8",
+        "Int4",
+        "Int4",
+        "Int4",
+        "Money",
+        "Money"
+      ]
+    },
+    "nullable": [
+      false
+    ]
+  },
+  "hash": "830911d7d6d3e48703ab875bceb242618e3e7752a4c2a0b22bc2125108c8e9ab"
+}

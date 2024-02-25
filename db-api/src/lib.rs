@@ -1,9 +1,7 @@
 use serde::{Deserialize, Serialize};
-use sqlx::{
-    error::BoxDynError,
-    postgres::{types::PgMoney, PgQueryResult},
-    PgPool,
-};
+use sqlx::{error::BoxDynError, postgres::types::PgMoney, PgPool};
+
+pub const ORDER_NOTIFY_CHANNEL: &str = "new_order";
 
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all(deserialize = "PascalCase"))]
@@ -66,7 +64,7 @@ struct NewOrder {
 pub async fn place_client_order(
     pool: &PgPool,
     ClientOrder { client, order }: &ClientOrder,
-) -> Result<PgQueryResult, BoxDynError> {
+) -> Result<i64, BoxDynError> {
     let late_penalty = parse_money_string(&order.late_pen)?;
     let early_penalty = parse_money_string(&order.early_pen)?;
 
@@ -100,21 +98,23 @@ pub async fn place_client_order(
     };
 
     tracing::info!("Placing order: {:#?}", order);
-    let result = place_new_order(order, &mut tx).await?;
-    if result.rows_affected() != 1 {
-        tx.rollback().await?;
-        return Err("No rows affected".into());
-    }
+    let order_id = match place_new_order(order, &mut tx).await {
+        Ok(id) => id,
+        Err(e) => return Err(e.into()),
+    };
+
+    let query = format!("NOTIFY {}, '{}'", ORDER_NOTIFY_CHANNEL, order_id);
+    sqlx::query(&query).execute(&mut *tx).await?;
     tx.commit().await?;
 
-    Ok(result)
+    Ok(order_id)
 }
 
 async fn place_new_order(
     order: NewOrder,
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-) -> Result<PgQueryResult, sqlx::Error> {
-    sqlx::query!(
+) -> Result<i64, sqlx::Error> {
+    Ok(sqlx::query!(
         "INSERT INTO orders (
             work_piece,
             client_id,
@@ -122,9 +122,11 @@ async fn place_new_order(
             quantity,
             due_date,
             late_penalty,
-            early_penalty)
+            early_penalty
+        )
         VALUES
-            ($1, $2, $3, $4, $5, $6, $7);
+            ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id
         ",
         order.piece_id,
         order.client_id,
@@ -134,8 +136,9 @@ async fn place_new_order(
         PgMoney(order.late_pen),
         PgMoney(order.early_pen)
     )
-    .execute(&mut **tx)
-    .await
+    .fetch_one(&mut **tx)
+    .await?
+    .id)
 }
 
 pub async fn get_client_id(
