@@ -72,11 +72,11 @@ pub async fn place_client_order(
     let piece_id = get_piece_id(&order.work_piece, &mut tx).await?;
     let client_id = match get_client_id(client, &mut tx).await {
         Ok(id) => {
-            tracing::info!("Client found! ID: {}", id);
+            tracing::debug!("Client found! ID: {}", id);
             id
         }
         Err(_) => {
-            tracing::info!("Client not found! Creating new client");
+            tracing::debug!("Client not found! Creating new client");
             sqlx::query!(
                 "INSERT INTO clients(name) VALUES($1) RETURNING id",
                 client.name_id
@@ -97,7 +97,7 @@ pub async fn place_client_order(
         early_pen: early_penalty,
     };
 
-    tracing::info!("Placing order: {:#?}", order);
+    tracing::debug!("Placing order: {:#?}", order);
     let order_id = match place_new_order(order, &mut tx).await {
         Ok(id) => id,
         Err(e) => return Err(e.into()),
