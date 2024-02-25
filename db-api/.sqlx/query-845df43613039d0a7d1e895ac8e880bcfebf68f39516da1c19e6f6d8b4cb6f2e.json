@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "SELECT id FROM pieces WHERE name = $1 ",
+  "query": "SELECT id FROM pieces WHERE name = $1",
   "describe": {
     "columns": [
       {
@@ -18,5 +18,5 @@
       false
     ]
   },
-  "hash": "e19e875bb70878451ed64703564c154fe5c3fbfc1df4869823036abb36e3ae93"
+  "hash": "845df43613039d0a7d1e895ac8e880bcfebf68f39516da1c19e6f6d8b4cb6f2e"
 }

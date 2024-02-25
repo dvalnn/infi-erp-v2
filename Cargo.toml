@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["core/resolver", "core/udp-listener", "web/api", "web/frontend"]
+members = ["core/udp-listener", "db-api"]
 
 [workspace.dependencies]
 tokio = { version = "1.3", features = ["full"] }

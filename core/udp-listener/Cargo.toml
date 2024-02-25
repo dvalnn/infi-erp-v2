@@ -13,3 +13,5 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true }
 dotenv = { workspace = true }
 sqlx = { workspace = true }
+
+db-api = { path = "../../db-api" }

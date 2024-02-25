@@ -13,6 +13,6 @@ CREATE TABLE IF NOT EXISTS inventory(
   FOREIGN KEY(location) REFERENCES warehouses(id)
   ON DELETE CASCADE,
 
-  FOREIGN KEY(batch) REFERENCESsupply_batches(id)
+  FOREIGN KEY(batch) REFERENCES supply_batches(id)
   ON DELETE CASCADE
 );

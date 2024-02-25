@@ -1,125 +1,11 @@
-use serde::{Deserialize, Serialize};
-use sqlx::{
-    postgres::{types::PgMoney, PgQueryResult},
-    PgPool,
-};
+use db_api::{place_client_order, run_migrations, ClientOrder};
 use std::{env, error::Error, io};
 use tokio::net::UdpSocket;
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all(deserialize = "PascalCase"))]
-enum WorkPieces {
-    P5,
-    P6,
-    P7,
-    P9,
-}
-
-impl std::fmt::Display for WorkPieces {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            WorkPieces::P5 => write!(f, "P5"),
-            WorkPieces::P6 => write!(f, "P6"),
-            WorkPieces::P7 => write!(f, "P7"),
-            WorkPieces::P9 => write!(f, "P9"),
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all(deserialize = "PascalCase"))]
-struct Order {
-    number: i32,
-    work_piece: WorkPieces,
-    quantity: i32,
-    due_date: i32,
-    late_pen: String,
-    early_pen: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all(deserialize = "PascalCase"))]
-struct Client {
-    name_id: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all(deserialize = "PascalCase"))]
-struct ClientOrder {
-    client: Client,
-    order: Order,
-}
 
 struct Server {
     pool: sqlx::PgPool,
     socket: UdpSocket,
     buf: Vec<u8>,
-}
-
-type MyExecutor<'this> = &'this mut sqlx::PgConnection;
-
-async fn place_new_order(
-    pool: &PgPool,
-    order: &ClientOrder,
-) -> Result<PgQueryResult, sqlx::Error> {
-    let mut tx = pool.begin().await?;
-
-    let piece_id = sqlx::query!(
-        "SELECT id FROM pieces WHERE name = $1 ",
-        order.order.work_piece.to_string()
-    )
-    .fetch_one(&mut tx as MyExecutor)
-    .await?
-    .id;
-
-    let client_id = sqlx::query!(
-        "SELECT id FROM clients WHERE name = $1",
-        order.client.name_id
-    )
-    .fetch_one(&mut tx as MyExecutor)
-    .await;
-
-    let client_id = match client_id {
-        Ok(rec) => rec.id,
-        Err(_) => {
-            sqlx::query!(
-                "INSERT INTO clients(name) VALUES($1) RETURNING id",
-                order.client.name_id
-            )
-            .fetch_one(&mut tx as MyExecutor)
-            .await?
-            .id
-        }
-    };
-
-    let result = sqlx::query!(
-        "INSERT INTO orders (
-            work_piece,
-            client_id,
-            order_number,
-            quantity,
-            due_date,
-            late_penalty,
-            early_penalty)
-        VALUES
-            ($1, $2, $3, $4, $5, $6, $7);
-        ",
-        piece_id,
-        client_id,
-        order.order.number,
-        order.order.quantity,
-        order.order.due_date,
-        PgMoney(3),
-        PgMoney(4),
-        // PgMoney(order.order.late_pen),
-        // PgMoney(order.order.early_pen)
-    )
-    .execute(&mut tx as MyExecutor)
-    .await?;
-
-    tx.commit().await?;
-
-    Ok(result)
 }
 
 impl Server {
@@ -139,6 +25,8 @@ impl Server {
             let data = &buf[..length];
             let raw_xml = String::from_utf8_lossy(data);
 
+            tracing::info!("Received {length} bytes");
+
             let orders =
                 match serde_xml_rs::from_str::<Vec<ClientOrder>>(&raw_xml) {
                     Ok(vec) => vec,
@@ -147,10 +35,14 @@ impl Server {
                         continue;
                     }
                 };
+
             tracing::info!("Parsed {:#?} orders", orders.len());
-            match place_new_order(&pool, &orders[0]).await {
-                Ok(_) => tracing::info!("Order successfully placed"),
-                Err(e) => tracing::error!("Error placing order: {e}"),
+
+            for order in orders.iter() {
+                match place_client_order(&pool, order).await {
+                    Ok(_) => tracing::info!("Order successfully placed"),
+                    Err(e) => tracing::error!("Error placing order: {e}"),
+                }
             }
         }
     }
@@ -159,12 +51,18 @@ impl Server {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     dotenv::dotenv().ok();
+    tracing_subscriber::fmt::init();
 
     let database_url = env::var("DATABASE_URL")?;
+    tracing::info!("Connecting to database...");
 
     let pool = sqlx::PgPool::connect(&database_url).await?;
+    if let Err(e) = run_migrations(&pool).await {
+        tracing::error!("Error running migrations: {e}");
+        return Err(e);
+    }
 
-    tracing_subscriber::fmt::init();
+    tracing::info!("DB connection and initializtion successfull.");
 
     let addr = env::args()
         .nth(1)
