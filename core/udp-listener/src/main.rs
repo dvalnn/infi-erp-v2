@@ -1,5 +1,6 @@
+use anyhow::anyhow;
 use db_api::{place_client_order, run_migrations, ClientOrder};
-use std::{env, error::Error, io};
+use std::{env, io};
 use tokio::net::UdpSocket;
 
 struct Server {
@@ -49,17 +50,20 @@ impl Server {
 }
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn Error>> {
+async fn main() -> Result<(), anyhow::Error> {
     dotenv::dotenv().ok();
     tracing_subscriber::fmt::init();
 
-    let database_url = env::var("DATABASE_URL")?;
+    let database_url = match env::var("DATABASE_URL") {
+        Ok(url) => url,
+        Err(e) => return Err(anyhow!(e)),
+    };
     tracing::info!("Connecting to database...");
 
     let pool = sqlx::PgPool::connect(&database_url).await?;
     if let Err(e) = run_migrations(&pool).await {
         tracing::error!("Error running migrations: {e}");
-        return Err(e);
+        return Err(anyhow!(e));
     }
 
     tracing::info!("DB connection and initializtion successfull.");
