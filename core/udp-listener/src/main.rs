@@ -18,7 +18,6 @@ impl Server {
         } = self;
 
         loop {
-            // next message we're going to echo back.
             let metadata = Some(socket.recv_from(&mut buf).await?);
             let Some((length, _)) = metadata else {
                 continue;
@@ -79,7 +78,7 @@ async fn main() -> Result<(), anyhow::Error> {
     let server = Server {
         pool,
         socket,
-        buf: vec![0; 1024],
+        buf: vec![0; 10024],
     };
 
     // This starts the server task.
