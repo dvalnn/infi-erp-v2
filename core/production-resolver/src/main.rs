@@ -1,3 +1,5 @@
+mod resolver;
+
 use anyhow::anyhow;
 
 #[tokio::main]
@@ -26,11 +28,9 @@ async fn main() -> Result<(), anyhow::Error> {
 
     tracing::info!("DB connection and initializtion successfull.");
 
-    loop {
-        let notification = match notification_listener.recv().await {
-            Ok(notif) => notif,
-            Err(e) => return Err(anyhow!(e)),
-        };
-        println!("Received notification: {:#?}", notification);
-    }
+    let mut resolver = resolver::Resolver::new(pool, notification_listener);
+
+    resolver.run().await?;
+
+    Ok(())
 }
