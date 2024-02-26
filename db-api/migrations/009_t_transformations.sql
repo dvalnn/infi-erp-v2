@@ -1,14 +1,15 @@
 CREATE DOMAIN tools AS VARCHAR(2) CHECK (value IN(
-  'T1',
-  'T2',
-  'T3',
-  'T4',
-  'T5',
-  'T6'
+    'T1',
+    'T2',
+    'T3',
+    'T4',
+    'T5',
+    'T6'
 ));
 
 CREATE TABLE IF NOT EXISTS transformations (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+
   from_piece BIGINT NOT NULL,
   to_piece BIGINT NOT NULL,
   tool tools NOT NULL,
