@@ -14,10 +14,11 @@ CREATE TABLE IF NOT EXISTS bom (
     FOREIGN KEY (transformation_id) REFERENCES transformations (id)
     On DELETE CASCADE,
 
-    CHECK (piece_number > 0 AND piece_number <= pieces_total)
     CHECK (pieces_total > 0),
-    CHECK (step_number > 0 AND step_number <= steps_total)
-    CHECK (steps_total > 0)
+    CHECK (piece_number > 0 AND piece_number <= pieces_total),
+
+    CHECK (steps_total > 0),
+    CHECK (step_number > 0 AND step_number <= steps_total),
 
     UNIQUE (order_id, transformation_id, piece_number, step_number)
 );

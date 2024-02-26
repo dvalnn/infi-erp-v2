@@ -24,7 +24,6 @@ impl Resolver {
     ) -> Result<(), anyhow::Error> {
         tracing::info!("Generating BOM entry for new order {}", new_order_idx);
         let order = db_api::get_order(new_order_idx, &self.pool).await?;
-
         println!("Order: {:?}", order);
 
         Ok(())
