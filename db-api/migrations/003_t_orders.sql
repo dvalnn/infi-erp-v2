@@ -1,18 +1,18 @@
 CREATE TABLE IF NOT EXISTS orders(
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
 
-  work_piece BIGINT NOT NULL,
+  piece_id BIGINT NOT NULL,
   client_id BIGINT NOT NULL,
-  order_number INT NOT NULL,
+  number INT NOT NULL,
   quantity INT NOT NULL,
   due_date INT NOT NULL,
-  late_penalty MONEY NOT NULL DEFAULT 0,
-  early_penalty MONEY NOT NULL DEFAULT 0,
+  late_pen MONEY NOT NULL DEFAULT 0,
+  early_pen MONEY NOT NULL DEFAULT 0,
 
-  FOREIGN KEY(work_piece) REFERENCES pieces(id)
+  FOREIGN KEY(piece_id) REFERENCES pieces(id)
     ON DELETE CASCADE,
   FOREIGN KEY(client_id)  REFERENCES clients(id)
     ON DELETE CASCADE,
 
-  UNIQUE(client_id, order_number)
+  UNIQUE(client_id, number)
 );

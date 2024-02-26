@@ -48,14 +48,15 @@ pub struct ClientOrder {
 }
 
 #[derive(Debug)]
-struct NewOrder {
-    piece_id: i64,
-    client_id: i64,
-    number: i32,
-    quantity: i32,
-    due_date: i32,
-    late_pen: i64,
-    early_pen: i64,
+pub struct PgOrder {
+    pub id: i64,
+    pub piece_id: i64,
+    pub client_id: i64,
+    pub number: i32,
+    pub quantity: i32,
+    pub due_date: i32,
+    pub late_pen: PgMoney,
+    pub early_pen: PgMoney,
 }
 
 /// Place a new order for a client with the given order details.
@@ -69,8 +70,8 @@ pub async fn place_client_order(
     let early_penalty = parse_money_string(&order.early_pen)?;
 
     let mut tx = pool.begin().await?;
-    let piece_id = get_piece_id(&order.work_piece, &mut tx).await?;
-    let client_id = match get_client_id(client, &mut tx).await {
+    let piece_id = tx_get_piece_id(&order.work_piece, &mut tx).await?;
+    let client_id = match tx_get_client_id(client, &mut tx).await {
         Ok(id) => {
             tracing::debug!("Client found! ID: {}", id);
             id
@@ -87,14 +88,15 @@ pub async fn place_client_order(
         }
     };
 
-    let order = NewOrder {
+    let order = PgOrder {
+        id: 0, // This will be set by the database when the order is inserted
         piece_id,
         client_id,
         number: order.number,
         quantity: order.quantity,
         due_date: order.due_date,
-        late_pen: late_penalty,
-        early_pen: early_penalty,
+        late_pen: PgMoney(late_penalty),
+        early_pen: PgMoney(early_penalty),
     };
 
     tracing::debug!("Placing order: {:#?}", order);
@@ -111,18 +113,18 @@ pub async fn place_client_order(
 }
 
 async fn place_new_order(
-    order: NewOrder,
+    order: PgOrder,
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-) -> Result<i64, sqlx::Error> {
+) -> sqlx::Result<i64> {
     Ok(sqlx::query!(
         "INSERT INTO orders (
-            work_piece,
+            piece_id,
             client_id,
-            order_number,
+            number,
             quantity,
             due_date,
-            late_penalty,
-            early_penalty
+            late_pen,
+            early_pen
         )
         VALUES
             ($1, $2, $3, $4, $5, $6, $7)
@@ -133,15 +135,16 @@ async fn place_new_order(
         order.number,
         order.quantity,
         order.due_date,
-        PgMoney(order.late_pen),
-        PgMoney(order.early_pen)
+        order.late_pen,
+        order.early_pen
     )
     .fetch_one(&mut **tx)
     .await?
     .id)
 }
 
-pub async fn get_client_id(
+/// Get the id of a client. Use with a transaction type connection
+pub async fn tx_get_client_id(
     client: &Client,
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
 ) -> Result<i64, sqlx::Error> {
@@ -153,10 +156,11 @@ pub async fn get_client_id(
     )
 }
 
-pub async fn get_piece_id(
+/// Get the id of a piece. Use with a transaction type connection
+pub async fn tx_get_piece_id(
     piece_name: &WorkPieces,
     tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
-) -> Result<i64, sqlx::Error> {
+) -> sqlx::Result<i64> {
     Ok(sqlx::query!(
         "SELECT id FROM pieces WHERE name = $1",
         piece_name.to_string()
@@ -187,11 +191,18 @@ pub fn parse_money_string(money: &str) -> Result<i64, std::num::ParseIntError> {
         .parse()
 }
 
-pub async fn run_migrations(
-    pool: &PgPool,
-) -> Result<(), Box<dyn std::error::Error>> {
+pub async fn run_migrations(pool: &PgPool) -> sqlx::Result<()> {
     sqlx::migrate!("./migrations").run(pool).await?;
     Ok(())
+}
+
+pub async fn get_order(
+    new_order_id: i64,
+    pool: &PgPool,
+) -> sqlx::Result<PgOrder> {
+    sqlx::query_as!(PgOrder, "SELECT * FROM orders WHERE id = $1", new_order_id)
+        .fetch_one(pool)
+        .await
 }
 
 #[cfg(test)]

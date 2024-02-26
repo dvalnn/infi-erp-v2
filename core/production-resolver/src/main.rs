@@ -14,6 +14,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut notification_listener =
         sqlx::postgres::PgListener::connect(&database_url).await?;
 
+    let pool = sqlx::postgres::PgPool::connect(&database_url).await?;
     notification_listener
         .listen(db_api::ORDER_NOTIFY_CHANNEL)
         .await?;
