@@ -1,0 +1,52 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "SELECT * FROM transformations WHERE to_piece = $1",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 1,
+        "name": "from_piece",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 2,
+        "name": "to_piece",
+        "type_info": "Int8"
+      },
+      {
+        "ordinal": 3,
+        "name": "tool",
+        "type_info": "Varchar"
+      },
+      {
+        "ordinal": 4,
+        "name": "quantity",
+        "type_info": "Int4"
+      },
+      {
+        "ordinal": 5,
+        "name": "cost",
+        "type_info": "Money"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      false,
+      false,
+      false
+    ]
+  },
+  "hash": "5e1cda8f8948dd0038f857c9d4abb987e7ec50c5d0d473f6e3ff64f33e598be3"
+}
