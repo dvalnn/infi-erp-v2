@@ -84,3 +84,14 @@ pub async fn get_repice_to_root(
 
     Ok(recipe)
 }
+
+#[derive(Debug)]
+pub struct Bom {
+    pub id: i64,
+    pub order_id: i64,
+    pub transformation_id: i64,
+    pub piece_number: i32,
+    pub pieces_total: i32,
+    pub step_number: i32,
+    pub steps_total: i32,
+}
