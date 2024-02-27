@@ -22,9 +22,17 @@ impl Resolver {
         &self,
         new_order_idx: i64,
     ) -> Result<(), anyhow::Error> {
-        tracing::info!("Generating BOM entry for new order {}", new_order_idx);
+        tracing::info!(
+            "Generating BOM entry for order with id {}",
+            new_order_idx
+        );
         let order = db_api::get_order(new_order_idx, &self.pool).await?;
-        println!("Order: {:?}", order);
+        let recipe =
+            db_api::get_repice_to_root(order.piece_id, &self.pool).await?;
+
+        println!("Recipe for order with id {}: {:#?}", new_order_idx, recipe);
+
+        // ... generate BOM entry
 
         Ok(())
     }

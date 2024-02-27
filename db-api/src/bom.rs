@@ -1,6 +1,6 @@
 use sqlx::{postgres::types::PgMoney, PgPool};
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Tools {
     T1,
     T2,
@@ -25,7 +25,7 @@ impl From<String> for Tools {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Transformation {
     pub id: i64,
     pub from_piece: i64,
@@ -35,18 +35,52 @@ pub struct Transformation {
     pub cost: PgMoney,
 }
 
-pub struct Recipe(pub Vec<Transformation>);
+pub type Recipe = Vec<Transformation>;
 
-pub async fn get_piece_recipe(
-    piece_id: i64,
+/// Gets transformations that output "to_piece".
+pub async fn get_imediate_recipe(
+    to_piece: i64,
     pool: &PgPool,
-) -> Result<Vec<Recipe>, sqlx::Error> {
-    let mut from_piece = piece_id;
-    let mut recipes: Vec<Recipe> = Vec::new();
+) -> Result<Recipe, sqlx::Error> {
+    sqlx::query_as!(
+        Transformation,
+        "SELECT * FROM transformations WHERE to_piece = $1",
+        to_piece
+    )
+    .fetch_all(pool)
+    .await
+}
+
+/// Gets the full recipe required to produce the piece.
+/// Traverses the transformations table until it finds the root piece.
+/// Return a flat list of transformations that represents the recipe tree.
+pub async fn get_repice_to_root(
+    final_piece_id: i64,
+    pool: &PgPool,
+) -> Result<Recipe, sqlx::Error> {
+    let mut targets = vec![final_piece_id];
+    let mut recipe: Recipe = Vec::new();
 
     loop {
-        todo!("Get the recipe from the database");
+        let mut transforms = Vec::new();
+
+        for piece in targets.iter() {
+            let mut tfs = get_imediate_recipe(*piece, pool).await?;
+            transforms.append(&mut tfs);
+        }
+
+        if transforms.is_empty() {
+            break;
+        }
+
+        transforms.dedup();
+        targets.clear();
+        for t in transforms.iter() {
+            targets.push(t.from_piece);
+        }
+
+        recipe.append(&mut transforms);
     }
 
-    Ok(recipes)
+    Ok(recipe)
 }
