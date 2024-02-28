@@ -38,10 +38,7 @@ pub struct Transformation {
 pub type Recipe = Vec<Transformation>;
 
 /// Gets transformations that output "to_piece".
-pub async fn get_imediate_recipe(
-    to_piece: i64,
-    pool: &PgPool,
-) -> Result<Recipe, sqlx::Error> {
+pub async fn get_imediate_recipe(to_piece: i64, pool: &PgPool) -> Result<Recipe, sqlx::Error> {
     sqlx::query_as!(
         Transformation,
         "SELECT * FROM transformations WHERE to_piece = $1",
@@ -54,10 +51,7 @@ pub async fn get_imediate_recipe(
 /// Gets the full recipe required to produce the piece.
 /// Traverses the transformations table until it finds the root piece.
 /// Return a flat list of transformations that represents the recipe tree.
-pub async fn get_repice_to_root(
-    final_piece_id: i64,
-    pool: &PgPool,
-) -> Result<Recipe, sqlx::Error> {
+pub async fn get_repice_to_root(final_piece_id: i64, pool: &PgPool) -> Result<Recipe, sqlx::Error> {
     let mut targets = vec![final_piece_id];
     let mut recipe: Recipe = Vec::new();
 
@@ -94,4 +88,43 @@ pub struct Bom {
     pub pieces_total: i32,
     pub step_number: i32,
     pub steps_total: i32,
+}
+
+impl Bom {
+    pub async fn insert(&self, pool: &PgPool) -> Result<i64, sqlx::Error> {
+        let Bom {
+            id,
+            order_id,
+            transformation_id,
+            piece_number,
+            pieces_total,
+            step_number,
+            steps_total,
+        } = self;
+
+        let id = sqlx::query!(
+            "
+            INSERT INTO bom(
+                order_id,
+                transformation_id,
+                piece_number,
+                pieces_total,
+                step_number,
+                steps_total
+            )
+            VALUES($1, $2, $3, $4, $5, $6)
+            RETURNING id
+            ",
+            order_id,
+            transformation_id,
+            piece_number,
+            pieces_total,
+            step_number,
+            steps_total
+        )
+        .fetch_one(&pool)
+        .await?;
+
+        Ok(id)
+    }
 }
