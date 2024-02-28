@@ -34,29 +34,45 @@ impl Resolver {
             path.push(transformation);
         }
 
-        println!("Exploded recipe: {:#?}", exploded);
+        tracing::debug!("Exploded recipe: {:#?}", exploded);
 
         exploded
     }
 
-    pub async fn generate_bom_entries(&self, new_order_idx: i64) -> Result<(), anyhow::Error> {
-        tracing::info!("Generating BOM entry for order with id {}", new_order_idx);
-        let order = db_api::get_order(new_order_idx, &self.pool).await?;
+    pub async fn generate_bom_entries(&self, order_id: i64) -> Result<(), anyhow::Error> {
+        tracing::info!("Generating BOM entry for order with id {}", order_id);
+        let order = db_api::get_order(order_id, &self.pool).await?;
         let recipe = db_api::get_repice_to_root(order.piece_id, &self.pool).await?;
 
-        println!("Recipe for order with id {}: {:#?}", new_order_idx, recipe);
+        tracing::debug!("Recipe for order with id {}: {:#?}", order_id, recipe);
 
         //NOTE: A graph may be a better representation for the recipe.
         //      Since the decision algorithm is still very simple, this
         //      approach is sufficient for now
         let recipe_map = Resolver::map_flat_recipe(recipe);
 
-        // decide on the path to take. For now, just take the least cost path
+        // Decide on the path to take. For now, just take the least cost path.
+        // Later, we may want to take into account the availability of the tools
+        // and maybe real time data from the MES.
         let bom_entries = get_cheapest_path(order.piece_id, recipe_map);
 
-        println!("BOM entries: {:#?}", bom_entries);
+        let steps_total = bom_entries.len() as i32;
+        let pieces_total = order.quantity;
 
-        // TODO: save the BOM entries to the database
+        for piece_number in 1..=pieces_total {
+            for (step_number, transformation) in bom_entries.iter().rev().enumerate() {
+                let bom = db_api::Bom::new(
+                    order_id,
+                    transformation.id,
+                    piece_number,
+                    pieces_total,
+                    (step_number + 1) as i32,
+                    steps_total,
+                );
+                let id = bom.insert(&self.pool).await?;
+                tracing::info!("Inserted BOM entry with id {}", id);
+            }
+        }
 
         Ok(())
     }
@@ -82,51 +98,11 @@ fn get_cheapest_path(starting_piece: i64, recipe_map: HashMap<i64, Recipe>) -> V
 #[cfg(test)]
 mod tests {
     use super::*;
-    use db_api::{Tools, Transformation};
-    use sqlx::postgres::types::PgMoney;
+    // use db_api::{Tools, Transformation};
+    // use sqlx::postgres::types::PgMoney;
 
     #[test]
-    fn test_explode_recipe() {
-        let recipe = vec![
-            Transformation {
-                id: 1,
-                from_piece: 1,
-                to_piece: 2,
-                tool: Tools::T6,
-                quantity: 1,
-                cost: PgMoney(100),
-            },
-            Transformation {
-                id: 2,
-                from_piece: 2,
-                to_piece: 3,
-                tool: Tools::T6,
-                quantity: 1,
-                cost: PgMoney(200),
-            },
-            Transformation {
-                id: 3,
-                from_piece: 2,
-                to_piece: 3,
-                tool: Tools::T5,
-                quantity: 1,
-                cost: PgMoney(200),
-            },
-            Transformation {
-                id: 4,
-                from_piece: 4,
-                to_piece: 5,
-                tool: Tools::T4,
-                quantity: 1,
-                cost: PgMoney(200),
-            },
-        ];
-
-        let mut expected = HashMap::new();
-
-        let exploded = Resolver::map_flat_recipe(recipe);
-
-        //TODO: fix this test. The expected result is not correct.
-        assert_eq!(exploded, expected);
+    fn test_map_flat_recipe() {
+        todo!("Write test for Resolver::map_flat_recipe")
     }
 }
