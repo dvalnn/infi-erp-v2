@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use db_api::{Recipe, Transformation};
+use db_api::{Bom, Order, Recipe, Transformation};
 use sqlx::{postgres::PgListener, PgPool};
 
 pub struct Resolver {
@@ -40,6 +40,18 @@ impl Resolver {
 
         tracing::debug!("Parsed new bom entries {:#?}", ids);
 
+        let entries = ids.iter().fold(Vec::new(), |mut acc, id| {
+            acc.push(Bom::get_by_id(*id, &self.pool));
+            acc
+        });
+
+        let entries = futures::future::try_join_all(entries).await?;
+
+        //TODO: query the MES and check which lines are compatible with
+        //      the new bom entries. If no line is compatible, log a warning
+
+        let order = db_api::get_order(entries[0].order_id, &self.pool).await?;
+
         Ok(())
     }
 
@@ -73,6 +85,39 @@ impl Resolver {
                 }
             }
         }
+    }
+
+    pub async fn calculate_ideal_prod_plan(
+        order: &Order,
+        bom: &[Bom],
+    ) -> Result<(), anyhow::Error> {
+        let deadline = order.due_date;
+        let max_concurrent_orders = 3; // TODO: get this from MES or config
+
+        // Group the BOM entries by their stage in the production process
+        // of the final piece.
+        let mut stages = HashMap::<i32, Vec<Bom>>::new();
+        bom.iter().fold(&mut stages, |acc, entry| {
+            let stage = entry.step_number;
+            let stage = acc.entry(stage).or_default();
+            stage.push(*entry);
+            acc
+        });
+
+        // Calculate the ideal production plan
+        //
+        // The plan is a list of steps that must be taken to produce
+        // the pieces in the order. The steps are grouped by the stage
+        // in the production process of the final piece.
+        //
+        // The plan is calculated based on the due date of the order,
+        // and the times it takes to produce each piece in the order.
+        //
+        // The plan is calculated in such a way that the production
+        // process is as efficient as possible, and that the pieces
+        // are ready to be shipped by the due date.
+
+        todo!("Calculate the ideal production plan");
     }
 
     /// Explodes a flat recipe into multiple paths.
@@ -173,7 +218,7 @@ impl Resolver {
             for (step_number, transformation) in
                 bom_entries.iter().rev().enumerate()
             {
-                let bom = db_api::Bom::new(
+                let bom = Bom::new(
                     order_id,
                     transformation.id,
                     piece_number,
@@ -185,7 +230,7 @@ impl Resolver {
             }
         }
 
-        db_api::Bom::insert_batch(&batch, &self.pool).await?;
+        Bom::insert_batch(&batch, &self.pool).await?;
         tracing::info!("BOM entries generated for order {}", order_id);
 
         Ok(())

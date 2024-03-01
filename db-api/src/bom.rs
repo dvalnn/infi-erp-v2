@@ -85,7 +85,7 @@ pub async fn get_repice_to_root(
     Ok(recipe)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Bom {
     pub id: i64,
     pub order_id: i64,
@@ -114,6 +114,12 @@ impl Bom {
             step_number,
             steps_total,
         }
+    }
+
+    pub async fn get_by_id(id: i64, pool: &PgPool) -> Result<Bom, sqlx::Error> {
+        sqlx::query_as!(Bom, "SELECT * FROM bom WHERE id = $1", id)
+            .fetch_one(pool)
+            .await
     }
 
     /// Inserts a batch of BOM entries into the database.
