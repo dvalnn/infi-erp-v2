@@ -13,15 +13,65 @@ impl Resolver {
         Self { pool, listener }
     }
 
+    pub async fn handle_new_order(
+        &self,
+        payload: &str,
+    ) -> Result<(), anyhow::Error> {
+        let order_id: i64 = payload.parse()?;
+        tracing::info!("Received new order with id {}", order_id);
+        self.generate_bom_entries(order_id).await?;
+        Ok(())
+    }
+
+    pub async fn handle_new_bom_entry(
+        &self,
+        payload: &str,
+    ) -> Result<(), anyhow::Error> {
+        tracing::info!("Received new bom entries {}", payload);
+
+        let ids = payload
+            .split(',')
+            .filter_map(|s| s.parse().ok())
+            .collect::<Vec<i64>>();
+
+        if ids.is_empty() {
+            return Err(anyhow::anyhow!("Invalid payload: {}", payload));
+        }
+
+        tracing::debug!("Parsed new bom entries {:#?}", ids);
+
+        Ok(())
+    }
+
     pub async fn run(&mut self) -> Result<(), anyhow::Error> {
         // TODO: lauch a task to generate entries for existing orders
         // should be done in a separate task to avoid blocking the main loop
         // tokio::spawn(...)
 
+        //start listening on the notification channels
+        use db_api::NotificationChannel as Nc;
+        self.listener.listen_all(Nc::ALL_STR).await?;
+
+        // TODO: handle and log errors instead of returning them
         loop {
             let notification = self.listener.recv().await?;
-            let new_order_idx: i64 = notification.payload().parse()?;
-            self.generate_bom_entries(new_order_idx).await?;
+            let payload = notification.payload();
+            let channel = Nc::from(notification.channel());
+
+            match channel {
+                Nc::NewOrder => {
+                    self.handle_new_order(payload).await?;
+                }
+                Nc::NewBomEntry => {
+                    self.handle_new_bom_entry(payload).await?;
+                }
+                Nc::Unknown => {
+                    tracing::warn!(
+                        "Received notification on unknown channel: {:#?}",
+                        notification
+                    );
+                }
+            }
         }
     }
 
@@ -97,7 +147,8 @@ impl Resolver {
         &self,
         order_id: i64,
     ) -> Result<(), anyhow::Error> {
-        tracing::info!("Generating BOM entry for order with id {}", order_id);
+        tracing::debug!("Starting BOM resolution for order {}", order_id);
+
         let order = db_api::get_order(order_id, &self.pool).await?;
         let recipe =
             db_api::get_repice_to_root(order.piece_id, &self.pool).await?;
@@ -117,6 +168,7 @@ impl Resolver {
         let steps_total = bom_entries.len() as i32;
         let pieces_total = order.quantity;
 
+        let mut batch = Vec::new();
         for piece_number in 1..=pieces_total {
             for (step_number, transformation) in
                 bom_entries.iter().rev().enumerate()
@@ -129,10 +181,12 @@ impl Resolver {
                     (step_number + 1) as i32,
                     steps_total,
                 );
-                let id = bom.insert(&self.pool).await?;
-                tracing::info!("Inserted BOM entry with id {}", id);
+                batch.push(bom);
             }
         }
+
+        db_api::Bom::insert_batch(&batch, &self.pool).await?;
+        tracing::info!("BOM entries generated for order {}", order_id);
 
         Ok(())
     }
@@ -140,7 +194,6 @@ impl Resolver {
 
 #[cfg(test)]
 mod tests {
-
     use super::*;
     use db_api::{Tools, Transformation};
     use sqlx::postgres::types::PgMoney;

@@ -1,8 +1,6 @@
 use serde::{Deserialize, Serialize};
 use sqlx::{error::BoxDynError, postgres::types::PgMoney, PgPool};
 
-pub const ORDER_NOTIFY_CHANNEL: &str = "new_order";
-
 #[derive(Debug, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all(deserialize = "PascalCase"))]
 pub enum WorkPieces {
@@ -105,7 +103,8 @@ pub async fn place_client_order(
         Err(e) => return Err(e.into()),
     };
 
-    let query = format!("NOTIFY {}, '{}'", ORDER_NOTIFY_CHANNEL, order_id);
+    let channel = crate::NotificationChannel::NewOrder;
+    let query = format!("NOTIFY {}, '{}'", channel, order_id);
     sqlx::query(&query).execute(&mut *tx).await?;
     tx.commit().await?;
 
