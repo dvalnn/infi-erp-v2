@@ -87,22 +87,17 @@ impl Resolver {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn calculate_ideal_prod_plan(
         order: &Order,
-        bom: &[Bom],
+        bom: &mut [Bom],
     ) -> Result<(), anyhow::Error> {
         let deadline = order.due_date;
         let max_concurrent_orders = 3; // TODO: get this from MES or config
 
         // Group the BOM entries by their stage in the production process
         // of the final piece.
-        let mut stages = HashMap::<i32, Vec<Bom>>::new();
-        bom.iter().fold(&mut stages, |acc, entry| {
-            let stage = entry.step_number;
-            let stage = acc.entry(stage).or_default();
-            stage.push(*entry);
-            acc
-        });
+        bom.sort_by(|a, b| a.step_number.cmp(&b.step_number));
 
         // Calculate the ideal production plan
         //
@@ -117,6 +112,15 @@ impl Resolver {
         // process is as efficient as possible, and that the pieces
         // are ready to be shipped by the due date.
 
+        //run back from the due date and last stages and assign bom entries
+        //production time slots
+
+        //NOTE: for now lets try to complete the order a day before the due date
+        for day in (1..=deadline - 1).rev() {
+            for timeslot in (1..=12).rev() {
+                todo!("assing bom entries to production time slots");
+            }
+        }
         todo!("Calculate the ideal production plan");
     }
 

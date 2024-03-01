@@ -1,6 +1,7 @@
 // MODULES
 mod bom;
 mod orders;
+pub mod production;
 
 // RE-EXPORTS
 pub use bom::*;

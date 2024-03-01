@@ -5,7 +5,7 @@ CREATE IF NOT EXISTS TABLE production {
   bom_id BIGINT NOT NULL,
   day INT NOT NULL,
   timeslot INT NOT NULL,
-  prod_line INT NOT NULL,
+  prod_line_id INT NOT NULL,
 
   FOREIGN KEY (order_id) REFERENCES orders (id)
   ON DELETE CASCADE,
