@@ -38,10 +38,7 @@ pub struct Transformation {
 pub type Recipe = Vec<Transformation>;
 
 /// Gets transformations that output "to_piece".
-pub async fn get_imediate_recipe(
-    to_piece: i64,
-    pool: &PgPool,
-) -> Result<Recipe, sqlx::Error> {
+pub async fn get_imediate_recipe(to_piece: i64, pool: &PgPool) -> Result<Recipe, sqlx::Error> {
     sqlx::query_as!(
         Transformation,
         "SELECT * FROM transformations WHERE to_piece = $1",
@@ -54,10 +51,7 @@ pub async fn get_imediate_recipe(
 /// Gets the full recipe required to produce the piece.
 /// Traverses the transformations table until it finds the root piece.
 /// Return a flat list of transformations that represents the recipe tree.
-pub async fn get_repice_to_root(
-    final_piece_id: i64,
-    pool: &PgPool,
-) -> Result<Recipe, sqlx::Error> {
+pub async fn get_repice_to_root(final_piece_id: i64, pool: &PgPool) -> Result<Recipe, sqlx::Error> {
     let mut targets = vec![final_piece_id];
     let mut recipe: Recipe = Vec::new();
 
@@ -129,10 +123,7 @@ impl Bom {
     /// If all entries are inserted successfully, a notification is
     /// send to the `NewBomEntry` channel with the ids of the inserted
     /// entries separated by commas.
-    pub async fn insert_batch(
-        batch: &[Bom],
-        pool: &PgPool,
-    ) -> Result<(), sqlx::Error> {
+    pub async fn insert_batch(batch: &[Bom], pool: &PgPool) -> Result<(), sqlx::Error> {
         let mut tx = pool.begin().await?;
 
         let mut ids = Vec::new();

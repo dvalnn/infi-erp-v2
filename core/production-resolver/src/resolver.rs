@@ -1,32 +1,101 @@
+#![allow(unused_variables, dead_code)]
+
 use std::collections::HashMap;
 
-use db_api::{Bom, Order, Recipe, Transformation};
+use db_api::{Bom, Recipe, Transformation};
 use sqlx::{postgres::PgListener, PgPool};
+
+pub struct LineConfig {
+    id: i64,
+    selected_tools: [db_api::Tools; 2],
+    available_tools: [[db_api::Tools; 3]; 2],
+    tool_change_time: i32,
+}
+
+impl Default for LineConfig {
+    fn default() -> Self {
+        use db_api::Tools as Tl;
+        Self {
+            id: 1,
+            selected_tools: [Tl::T1, Tl::T1],
+            available_tools: [[Tl::T1, Tl::T2, Tl::T3], [Tl::T1, Tl::T2, Tl::T3]],
+            tool_change_time: 30,
+        }
+    }
+}
 
 pub struct Resolver {
     pool: PgPool,
     listener: PgListener,
+    configuration: Vec<LineConfig>,
+}
+enum Action {
+    Wait,
+    Bom(i64),
+    ToolSwitch(String, db_api::Tools),
+}
+
+struct TimeSlot {
+    day: u32,
+    slot: u32,
+}
+
+impl TimeSlot {
+    const TIME_SLOTS_IN_DAY: u32 = 12;
+
+    fn checked_sub(&self, rhs: TimeSlot) -> Option<TimeSlot> {
+        let Self { day, slot } = self;
+
+        // let day = match day.checked_sub(rhs.day){
+        //     Some(_) => todo!(),
+        //     None => todo!(),
+        // }
+        //
+        //
+        todo!()
+    }
+}
+
+impl std::ops::Add for TimeSlot {
+    type Output = Self;
+
+    fn add(self, rhs: Self) -> Self::Output {
+        let Self { day, slot } = self;
+        let mut day = day + rhs.day;
+        let mut slot = slot + rhs.slot;
+
+        if slot > Self::TIME_SLOTS_IN_DAY {
+            day += 1;
+            slot -= Self::TIME_SLOTS_IN_DAY;
+        }
+
+        Self { day, slot }
+    }
+}
+
+struct ProductionPlanEntry {
+    id: Option<i64>,
+    action: Option<Action>,
+    when: TimeSlot,
 }
 
 impl Resolver {
     pub fn new(pool: PgPool, listener: PgListener) -> Self {
-        Self { pool, listener }
+        Self {
+            pool,
+            listener,
+            configuration: vec![LineConfig::default()],
+        }
     }
 
-    pub async fn handle_new_order(
-        &self,
-        payload: &str,
-    ) -> Result<(), anyhow::Error> {
+    pub async fn handle_new_order(&self, payload: &str) -> Result<(), anyhow::Error> {
         let order_id: i64 = payload.parse()?;
         tracing::info!("Received new order with id {}", order_id);
         self.generate_bom_entries(order_id).await?;
         Ok(())
     }
 
-    pub async fn handle_new_bom_entry(
-        &self,
-        payload: &str,
-    ) -> Result<(), anyhow::Error> {
+    pub async fn handle_new_bom_entry(&self, payload: &str) -> Result<(), anyhow::Error> {
         tracing::info!("Received new bom entries {}", payload);
 
         let ids = payload
@@ -50,7 +119,9 @@ impl Resolver {
         //TODO: query the MES and check which lines are compatible with
         //      the new bom entries. If no line is compatible, log a warning
 
-        let order = db_api::get_order(entries[0].order_id, &self.pool).await?;
+        let due_date = db_api::get_order(entries[0].order_id, &self.pool)
+            .await?
+            .due_date;
 
         Ok(())
     }
@@ -89,11 +160,15 @@ impl Resolver {
 
     #[allow(dead_code)]
     pub async fn calculate_ideal_prod_plan(
-        order: &Order,
+        &self,
+        deadline: i32,
         bom: &mut [Bom],
     ) -> Result<(), anyhow::Error> {
-        let deadline = order.due_date;
-        let max_concurrent_orders = 3; // TODO: get this from MES or config
+        let Resolver {
+            pool,
+            listener: _,
+            configuration: config,
+        } = self;
 
         // Group the BOM entries by their stage in the production process
         // of the final piece.
@@ -116,12 +191,16 @@ impl Resolver {
         //production time slots
 
         //NOTE: for now lets try to complete the order a day before the due date
-        for day in (1..=deadline - 1).rev() {
-            for timeslot in (1..=12).rev() {
-                todo!("assing bom entries to production time slots");
-            }
-        }
-        todo!("Calculate the ideal production plan");
+
+        const SLOTS_IN_DAY: u32 = 12;
+        let current_day = deadline - 1;
+        let current_slot = SLOTS_IN_DAY;
+
+        // for entry in bom {
+        //     let
+        // }
+        //
+        todo!()
     }
 
     /// Explodes a flat recipe into multiple paths.
@@ -166,9 +245,7 @@ impl Resolver {
                 break;
             };
 
-            if let Some(cheapest_path) =
-                available_paths.iter().min_by_key(|t| t.cost.0)
-            {
+            if let Some(cheapest_path) = available_paths.iter().min_by_key(|t| t.cost.0) {
                 current_piece = cheapest_path.from_piece;
                 bom_entries.push(cheapest_path.clone());
             }
@@ -192,15 +269,11 @@ impl Resolver {
     ///
     /// # Arguments
     /// * `order_id` - The id of the order for which to generate the BOM entries
-    pub async fn generate_bom_entries(
-        &self,
-        order_id: i64,
-    ) -> Result<(), anyhow::Error> {
+    pub async fn generate_bom_entries(&self, order_id: i64) -> Result<(), anyhow::Error> {
         tracing::debug!("Starting BOM resolution for order {}", order_id);
 
         let order = db_api::get_order(order_id, &self.pool).await?;
-        let recipe =
-            db_api::get_repice_to_root(order.piece_id, &self.pool).await?;
+        let recipe = db_api::get_repice_to_root(order.piece_id, &self.pool).await?;
 
         tracing::debug!("Recipe for order with id {}: {:#?}", order_id, recipe);
 
@@ -219,9 +292,7 @@ impl Resolver {
 
         let mut batch = Vec::new();
         for piece_number in 1..=pieces_total {
-            for (step_number, transformation) in
-                bom_entries.iter().rev().enumerate()
-            {
+            for (step_number, transformation) in bom_entries.iter().rev().enumerate() {
                 let bom = Bom::new(
                     order_id,
                     transformation.id,
@@ -302,8 +373,7 @@ mod tests {
         map.insert(9, vec![RECIPE[3].clone()]);
 
         let result = get_cheapest_path(9, map);
-        let expected =
-            vec![RECIPE[3].clone(), RECIPE[2].clone(), RECIPE[0].clone()];
+        let expected = vec![RECIPE[3].clone(), RECIPE[2].clone(), RECIPE[0].clone()];
         assert_eq!(expected, result);
     }
 }
