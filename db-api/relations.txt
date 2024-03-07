@@ -11,25 +11,17 @@ orders(
   due_date int [NN],
   early_penalty money [NN],
   late_penalty money [NN],
-)
-
-orders_placement_day(
-  __client_id__ uuid [FK -> clients(id), NN],
-  __order_id__ bigint [FK -> orders(id), NN],
-  day int [NN],
+  placement_day int [NN],
 )
 
 deliveries(
   __order_id__ bigint [FK -> orders(id), NN],
   status delivery_status_kind [NN],
-  completion_date int,
+  delivery_date int,
 )
 NOTE: create delivery_status_kind as a domain in postgreSQL.
-
-warehouse(
-  __code__ char(2),
-  capacity int [NN],
-)
+      domain should be ["pending", "scheduled", "delivered"]
+      constraint delivery_date null only if status is pendin.
 
 piece(
   __code__ char(2),
@@ -37,8 +29,9 @@ piece(
 )
 NOTE: piece_type domain should be ["raw", "inter", "final"]
 
-tool(
+warehouse(
   __code__ char(2),
+  capacity int [NN],
 )
 
 item(
@@ -49,6 +42,19 @@ item(
   location char(2) [FK -> warehouse(code)],
 )
 NOTE: create item_status_kind as a domain in postgreSQL.
+
+tool(
+  __code__ char(2),
+)
+
+machine(
+ __code__ char(2),
+)
+
+machine_tools(
+  __machine__ [FK -> machine(code)],
+  __tool__ [FK -> tool(code)]
+)
 
 recipe(
   __id__ bigint,
@@ -71,15 +77,16 @@ item_transformations(
 supplier(
   __id__ bigint,
   name varchar(50) [NN],
+  raw_material_kind bigint [FK -> piece(code), NN]
   unit_cost money [NN],
   min_order_ammount [NN],
   delivery_time [NN]
 )
 
-shippment(
+shippments(
   __id__ bigint,
   supplier_id bigint [FK -> supplier(id), NN],
-  request_day int [NN],
+  request_date int [NN],
   quantity int [NN],
   cost money [NN],
 )
@@ -89,5 +96,3 @@ raw_material_arrivals(
   shippment_id bigint [FK -> shippment(id)],
   arrival_date int [NN],
 )
-
-
